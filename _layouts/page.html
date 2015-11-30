@@ -1,15 +1,17 @@
 ---
 layout: default
 ---
-<div class="footer-clear page-wrapper">
 
-  <div class="page-container">
+<article>
 
-    {{ content }}
+	<h1 class="title">{{ page.title }}</h1>
 
-  </div>
+	<div class="divider"></div>
 
-  <!-- footer -->
-  {% include footer.html %}
+	{{ content }}
 
+</article>
+
+<div class="back">
+	<a href="{{site.baseurl}}/">Back</a>
 </div>
