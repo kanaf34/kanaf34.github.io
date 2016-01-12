@@ -1,0 +1,161 @@
+
+
+Chrome Extension - Bookshelf Cliper 
+
+
+
+## JSONP 란?
+
+원래는 다른 도메인에 Ajax 통신을 하려고 하면 
+에러가 발생한다. 
+
+ [Same-Origin-Policy](https://en.wikipedia.org/wiki/Same-origin_policy) 
+
+그렇지만 우리는 사실 다른 도메인에서 데이터를 받아올 일이 넘치고 넘쳐서, 편법으로 우회하여 데이터를 받아오는 방법이 있다고.
+
+그 중에서 선배님께 배운게 'JSONP'.
+(JSONP 외에도 이것저것 있는 것 같았다.)
+
+## JSONP 의 원리? 수행방법?
+
+```
+		<script /> 태그는 same-origin-policy (SOP) 정책에 속하지 않는다.
+```
+
+요지는 위와 같다.
+클라이언트에서 callback 메소드명을 전달하고,
+서버단에서 Response를 
+	함수명 + '(' + 값 + ')'
+위와 같이 전달한다.
+
+
+- client
+
+```javascript
+
+var funcTest = function(res) {
+	alert(res);
+};
+
+(function() {
+	var dataObj = {
+		'callback' : 'funcTest'
+	};
+
+	$.ajax({
+		url : '요청을 보내려는 url',
+		data : dataObj,
+		type : 'POST'
+	});
+	
+})();
+
+```
+
+- server
+
+
+```javascript
+function JSONPy(obj, callbackNm) {
+  return callbackNm + "(" + JSON.stringify(obj) + ");";
+}
+
+function doGet() {
+
+	//...생략... 
+
+	var response = JSONPy(rsltObj, request.parameter.callback);
+
+	return ContentService
+	.createTextOutput(response)
+	.setMimeType(ContentService.MimeType.JAVASCRIPT);
+	}
+
+};
+
+```
+
+
+### 문제 발생 상황
+
+return 의 결과는 
+	funcTest({데이터})
+이런 모습이다.
+
+(funcTest 에 전달하는 값의 모습은 개인플젝의 
+서버 작성값에 따라 다를 것이다.)
+
+POSTMAN 으로 테스트해봐도, 실제 Client 의 네트워크-Response 부분을 확인해봐도 저 모습은 전달이 된다.
+
+근데, 실행이 안된다.
+내가 기대하는 funcTest 내부 로직이 수행이 안된다.
+
+저 사실때문에 삽질,뻘짓을 계속 했는데..
+'등잔밑이 어둡다' 라고 하던가,
+답은 의외로 공홈에 있었다.
+
+
+### 문제 해결 방법
+
+[CSP in Chrome Extension](https://developer.chrome.com/extensions/contentSecurityPolicy)
+
+위 사이트에서, "Evaluated JavaScript" 부분을 확인하면
+아래와 같이 작성되어있다.
+
+```
+		The policy against eval() and its relatives like setTimeout(String), setInterval(String), 
+		and new Function(String) can be relaxed by adding 'unsafe-eval' to your policy:
+```
+
+
+```json
+"content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self'"
+```
+
+여기까지 정리하고 나는 재밌는(짜증나는) 사실을 하나 알게 된다. 사실 진짜 문제는 Cross Origin Domain 이 아니라
+동적으로 javascript 를 실행하는 부분이라는거...(...)
+
+chrome extension 에서 Cross Origin Resource Sharing는
+(서로 다른 도메인간의 데이터 공유)
+manifest.json 의 "permissions" 에 작성한 값으로 해결완료.
+(google app script 는 return 이니까 상관없는걸까?)
+
+Authorization 연구때문에 입력했던 
+
+		"content_security_policy": "script-src 'self' https://api.google.com/; object-src 'self'"
+
+부분은 동적으로 호출하는 origin 을 지정하는거...?
+쨌든 저것도, JSONP 도, SOP 도 다 다른 문제.
+우헤헤...바보.ㅜㅜ
+
+- client
+
+```javascript
+
+$.ajax({
+	url : '요청을 보내려는 url',
+	data : saveData,
+	type : 'POST',
+	success : function(data) {
+		console.log(data);
+	}
+});
+
+```
+
+- server
+
+```javascript
+
+// ...생략...
+return ContentService
+	.createTextOutput(JSON.stringify(rsltObj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+```
+
+이렇게 적으면, client 의 success 부분에서 결과데이터가 잘 넘어온다.
+
+네, 약 2일간의 삽질의 완료입니다.
+
